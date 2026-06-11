@@ -48,6 +48,7 @@ export interface CustomerReview {
   rating: number;
   comment: string;
   date: string;
+  likes?: number;
 }
 
 export interface UserLocation {

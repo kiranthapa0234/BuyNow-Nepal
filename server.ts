@@ -13,14 +13,8 @@ const PORT = 3000;
 app.use(express.json({ limit: '100mb' }));
 app.use(express.urlencoded({ limit: '100mb', extended: true }));
 
-// Simple user store persistence mechanism
-import fs from 'fs';
 import { PRODUCTS as initialProducts, CUSTOMER_REVIEWS as initialReviews } from './src/data/products';
 import { createClient } from '@supabase/supabase-js';
-
-const USERS_FILE_PATH = path.join(process.cwd(), 'src/data/users.json');
-const PRODUCTS_FILE_PATH = path.join(process.cwd(), 'src/data/products.json');
-const REVIEWS_FILE_PATH = path.join(process.cwd(), 'src/data/reviews.json');
 
 // Initialize Supabase Client
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://cahuugpenecotdpbsnyj.supabase.co';
@@ -32,117 +26,6 @@ try {
   console.log('Supabase client initialized successfully with project URL:', SUPABASE_URL);
 } catch (err: any) {
   console.error('Warning: Supabase client initialization failed:', err.message);
-}
-
-function ensureUsersDb() {
-  try {
-    const dir = path.dirname(USERS_FILE_PATH);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    if (!fs.existsSync(USERS_FILE_PATH)) {
-      fs.writeFileSync(USERS_FILE_PATH, JSON.stringify([], null, 2), 'utf-8');
-    }
-  } catch (err) {
-    console.error('Failed to initialize users.json db:', err);
-  }
-}
-ensureUsersDb();
-
-function ensureProductsDb() {
-  try {
-    const dir = path.dirname(PRODUCTS_FILE_PATH);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    if (!fs.existsSync(PRODUCTS_FILE_PATH)) {
-      fs.writeFileSync(PRODUCTS_FILE_PATH, JSON.stringify(initialProducts, null, 2), 'utf-8');
-    }
-  } catch (err) {
-    console.error('Failed to initialize products.json db:', err);
-  }
-}
-ensureProductsDb();
-
-function ensureReviewsDb() {
-  try {
-    const dir = path.dirname(REVIEWS_FILE_PATH);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    if (!fs.existsSync(REVIEWS_FILE_PATH)) {
-      fs.writeFileSync(REVIEWS_FILE_PATH, JSON.stringify(initialReviews, null, 2), 'utf-8');
-    }
-  } catch (err) {
-    console.error('Failed to initialize reviews.json db:', err);
-  }
-}
-ensureReviewsDb();
-
-function readUsers() {
-  ensureUsersDb();
-  try {
-    const data = fs.readFileSync(USERS_FILE_PATH, 'utf-8');
-    return JSON.parse(data);
-  } catch (err) {
-    console.error('Error reading users db:', err);
-    return [];
-  }
-}
-
-function writeUsers(users: any) {
-  ensureUsersDb();
-  try {
-    fs.writeFileSync(USERS_FILE_PATH, JSON.stringify(users, null, 2), 'utf-8');
-    return true;
-  } catch (err) {
-    console.error('Error writing users db:', err);
-    return false;
-  }
-}
-
-function readProducts() {
-  ensureProductsDb();
-  try {
-    const data = fs.readFileSync(PRODUCTS_FILE_PATH, 'utf-8');
-    return JSON.parse(data);
-  } catch (err) {
-    console.error('Error reading products db:', err);
-    return initialProducts;
-  }
-}
-
-function writeProducts(products: any) {
-  ensureProductsDb();
-  try {
-    fs.writeFileSync(PRODUCTS_FILE_PATH, JSON.stringify(products, null, 2), 'utf-8');
-    return true;
-  } catch (err) {
-    console.error('Error writing products db:', err);
-    return false;
-  }
-}
-
-function readReviews() {
-  ensureReviewsDb();
-  try {
-    const data = fs.readFileSync(REVIEWS_FILE_PATH, 'utf-8');
-    return JSON.parse(data);
-  } catch (err) {
-    console.error('Error reading reviews db:', err);
-    return initialReviews;
-  }
-}
-
-function writeReviews(reviews: any) {
-  ensureReviewsDb();
-  try {
-    fs.writeFileSync(REVIEWS_FILE_PATH, JSON.stringify(reviews, null, 2), 'utf-8');
-    return true;
-  } catch (err) {
-    console.error('Error writing reviews db:', err);
-    return false;
-  }
 }
 
 // User signup route with validation and required location details
@@ -158,11 +41,22 @@ app.post('/api/auth/signup', async (req, res) => {
     const trimmedEmail = email.trim().toLowerCase();
     const trimmedPhone = phone.trim();
 
-    const users = readUsers();
-    
-    // Check if user already exists matches email or phone
-    const exists = users.find((u: any) => u.email === trimmedEmail || u.phone === trimmedPhone);
-    if (exists) {
+    if (!supabase) {
+      res.status(503).json({ error: 'Supabase database is currently unavailable.' });
+      return;
+    }
+
+    // Check if user already exists matches email or phone directly on Supabase
+    const { data: matchedUsers, error: checkError } = await supabase
+      .from('users')
+      .select('id, email, phone')
+      .or(`email.eq.${trimmedEmail},phone.eq.${trimmedPhone}`);
+
+    if (checkError) {
+      console.error('Supabase query error checking user exists:', checkError.message);
+    }
+
+    if (matchedUsers && matchedUsers.length > 0) {
       res.status(400).json({ error: 'A user with this Email address or Phone Number is already signed up.' });
       return;
     }
@@ -172,7 +66,7 @@ app.post('/api/auth/signup', async (req, res) => {
       name: name.trim(),
       email: trimmedEmail,
       phone: trimmedPhone,
-      password: password, // For simplicity we keep this as is, totally reliable in our environment
+      password: password, // Plain text for simplicity, matching our database schema setup
       location: {
         province: location.province,
         city: location.city,
@@ -180,32 +74,13 @@ app.post('/api/auth/signup', async (req, res) => {
         latitude: location.latitude || null,
         longitude: location.longitude || null
       },
-      createdAt: new Date().toISOString()
+      created_at: new Date().toISOString()
     };
 
-    users.push(newUser);
-    writeUsers(users);
-
-    // Sync to Supabase
-    if (supabase) {
-      try {
-        const { error } = await supabase.from('users').insert([{
-          id: newUser.id,
-          name: newUser.name,
-          email: newUser.email,
-          phone: newUser.phone,
-          password: newUser.password,
-          location: newUser.location,
-          created_at: newUser.createdAt
-        }]);
-        if (error) {
-          console.warn('Supabase non-blocking warning during signup (table might not exist yet):', error.message);
-        } else {
-          console.log(`Successfully saved signed-up user ${newUser.email} to Supabase`);
-        }
-      } catch (sbErr: any) {
-        console.warn('Supabase exception during signup:', sbErr.message);
-      }
+    const { error: insertError } = await supabase.from('users').insert([newUser]);
+    if (insertError) {
+      res.status(500).json({ error: 'Failed to complete registration on Supabase datastore: ' + insertError.message });
+      return;
     }
 
     // Return the user session data (hiding password string for security)
@@ -267,13 +142,23 @@ app.post('/api/auth/login', async (req, res) => {
       return;
     }
 
-    const users = readUsers();
+    if (!supabase) {
+      res.status(503).json({ error: 'Supabase database is currently offline.' });
+      return;
+    }
 
-    const user = users.find((u: any) => u.email === matchField || u.phone === matchField);
-    if (!user) {
+    // Query user profile directly from Supabase
+    const { data: matchedUsers, error: fetchError } = await supabase
+      .from('users')
+      .select('*')
+      .or(`email.eq.${matchField},phone.eq.${matchField}`);
+
+    if (fetchError || !matchedUsers || matchedUsers.length === 0) {
       res.status(401).json({ error: 'Invalid details. No registered account found with that email or phone number.' });
       return;
     }
+
+    const user = matchedUsers[0];
 
     if (user.password !== password) {
       res.status(401).json({ error: 'Invalid Password. Please double check and try again.' });
@@ -281,22 +166,15 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     // Record login attempt to Supabase Logins Table
-    if (supabase) {
-      try {
-        const { error } = await supabase.from('logins').insert([{
-          user_id: user.id,
-          email: user.email,
-          name: user.name,
-          logged_at: new Date().toISOString()
-        }]);
-        if (error) {
-          console.warn('Supabase logins log insert skipped (table might not exist yet):', error.message);
-        } else {
-          console.log(`Logged login event for ${user.email} in Supabase logins table`);
-        }
-      } catch (sbErr: any) {
-        console.warn('Supabase exception logging login:', sbErr.message);
-      }
+    try {
+      await supabase.from('logins').insert([{
+        user_id: user.id,
+        email: user.email,
+        name: user.name,
+        logged_at: new Date().toISOString()
+      }]);
+    } catch (sbErr: any) {
+      console.warn('Supabase exception logging login:', sbErr.message);
     }
 
     const { password: _, ...userWithoutPassword } = user;
@@ -318,53 +196,42 @@ app.post('/api/auth/profile/update', async (req, res) => {
       return;
     }
 
-    const users = readUsers();
-    const index = users.findIndex((u: any) => u.id === userId);
-
-    if (index === -1) {
-      res.status(404).json({ error: 'Authenticated account context not found.' });
+    if (!supabase) {
+      res.status(503).json({ error: 'Supabase database is currently offline.' });
       return;
     }
 
-    // Update fields while retaining existing password
-    users[index].name = name.trim();
-    users[index].email = email.trim().toLowerCase();
-    users[index].phone = phone.trim();
-    users[index].location = {
+    const updatedLocation = {
       province: location.province,
       city: location.city,
       address: location.address,
-      latitude: location.latitude || users[index].location.latitude,
-      longitude: location.longitude || users[index].location.longitude
+      latitude: location.latitude || null,
+      longitude: location.longitude || null
     };
 
-    writeUsers(users);
+    const { data: updatedUsers, error: updateError } = await supabase
+      .from('users')
+      .update({
+        name: name.trim(),
+        email: email.trim().toLowerCase(),
+        phone: phone.trim(),
+        location: updatedLocation
+      })
+      .eq('id', userId)
+      .select();
 
-    // Sync to Supabase
-    if (supabase) {
-      try {
-        const { error } = await supabase.from('users').update({
-          name: users[index].name,
-          email: users[index].email,
-          phone: users[index].phone,
-          location: users[index].location
-        }).eq('id', userId);
-        if (error) {
-          console.warn('Supabase update warning during profile save:', error.message);
-        } else {
-          console.log(`Successfully updated profile info for user ${userId} on Supabase`);
-        }
-      } catch (sbErr: any) {
-        console.warn('Supabase exception saving updated profile:', sbErr.message);
-      }
+    if (updateError || !updatedUsers || updatedUsers.length === 0) {
+      res.status(404).json({ error: 'Failed to update credentials on Supabase storage.' });
+      return;
     }
 
-    const { password: _, ...userWithoutPassword } = users[index];
+    const updatedUser = updatedUsers[0];
+    const { password: _, ...userWithoutPassword } = updatedUser;
     res.json({ success: true, user: userWithoutPassword });
 
   } catch (err) {
     console.error('Update profile API error:', err);
-    res.status(500).json({ error: 'Failed to update credentials on user database file.' });
+    res.status(500).json({ error: 'Failed to update credentials on user database.' });
   }
 });
 
@@ -482,13 +349,8 @@ app.get('/api/products', async (req, res) => {
     console.warn('Failed to query Supabase products:', err.message);
   }
 
-  // Fallback to local json Database
-  try {
-    const products = readProducts();
-    res.json(products);
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to retrieve products list.' });
-  }
+  // Fallback to static in-memory products (NO offline JSON reads)
+  res.json(initialProducts);
 });
 
 // POST Add or Edit Product (Admin only, with sync to Supabase)
@@ -500,67 +362,53 @@ app.post('/api/products', async (req, res) => {
       return;
     }
 
-    const products = readProducts();
-    const existingIndex = products.findIndex((p: any) => p.id === productData.id);
+    if (!supabase) {
+      res.status(503).json({ error: 'Supabase is currently offline.' });
+      return;
+    }
 
     const formattedProduct = {
       id: productData.id || 'prod_' + Math.random().toString(36).substr(2, 9),
       name: productData.name.trim(),
       description: (productData.description || '').trim(),
       price: Number(productData.price),
-      originalPrice: productData.originalPrice ? Number(productData.originalPrice) : undefined,
+      original_price: productData.originalPrice ? Number(productData.originalPrice) : null,
       image: productData.image || 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&q=80&w=600',
       images: Array.isArray(productData.images) ? productData.images : [productData.image || 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&q=80&w=600'],
       category: productData.category.trim(),
       colors: Array.isArray(productData.colors) ? productData.colors : (productData.colors || '').split(',').map((c: string) => c.trim()).filter((c: string) => c),
       rating: productData.rating ? Number(productData.rating) : 5.0,
-      reviewsCount: productData.reviewsCount ? Number(productData.reviewsCount) : 0,
+      reviews_count: productData.reviewsCount ? Number(productData.reviewsCount) : 0,
       stock: productData.stock ? Number(productData.stock) : 10,
       features: Array.isArray(productData.features) ? productData.features : (productData.features || '').split('\n').map((f: string) => f.trim()).filter((f: string) => f),
       specs: typeof productData.specs === 'object' ? productData.specs : {}
     };
 
-    if (existingIndex !== -1) {
-      // Edit
-      products[existingIndex] = { ...products[existingIndex], ...formattedProduct };
-    } else {
-      // Add new
-      products.push(formattedProduct);
+    const { error } = await supabase.from('products').upsert(formattedProduct, { onConflict: 'id' });
+
+    if (error) {
+      res.status(500).json({ error: 'Failed to save product in Supabase: ' + error.message });
+      return;
     }
 
-    writeProducts(products);
+    const clientProduct = {
+      id: formattedProduct.id,
+      name: formattedProduct.name,
+      description: formattedProduct.description,
+      price: formattedProduct.price,
+      originalPrice: formattedProduct.original_price || undefined,
+      image: formattedProduct.image,
+      images: formattedProduct.images,
+      category: formattedProduct.category,
+      colors: formattedProduct.colors,
+      rating: formattedProduct.rating,
+      reviewsCount: formattedProduct.reviews_count,
+      stock: formattedProduct.stock,
+      features: formattedProduct.features,
+      specs: formattedProduct.specs
+    };
 
-    // Sync to Supabase
-    if (supabase) {
-      try {
-        const { error } = await supabase.from('products').upsert({
-          id: formattedProduct.id,
-          name: formattedProduct.name,
-          description: formattedProduct.description,
-          price: formattedProduct.price,
-          original_price: formattedProduct.originalPrice || null,
-          image: formattedProduct.image,
-          images: formattedProduct.images,
-          category: formattedProduct.category,
-          colors: formattedProduct.colors,
-          rating: formattedProduct.rating,
-          reviews_count: formattedProduct.reviewsCount,
-          stock: formattedProduct.stock,
-          features: formattedProduct.features,
-          specs: formattedProduct.specs
-        }, { onConflict: 'id' });
-
-        if (error) {
-          console.warn('Supabase product upsert warning (table might not exist yet):', error.message);
-        } else {
-          console.log(`Successfully upserted product ${formattedProduct.name} on Supabase`);
-        }
-      } catch (sbErr: any) {
-        console.warn('Supabase exception saving product attributes:', sbErr.message);
-      }
-    }
-
-    res.json({ success: true, product: formattedProduct });
+    res.json({ success: true, product: clientProduct });
   } catch (err) {
     res.status(500).json({ error: 'Failed to add/update product data.' });
   }
@@ -570,28 +418,16 @@ app.post('/api/products', async (req, res) => {
 app.delete('/api/products/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const products = readProducts();
-    const updated = products.filter((p: any) => p.id !== id);
 
-    if (products.length === updated.length) {
-      res.status(404).json({ error: 'Product not found.' });
+    if (!supabase) {
+      res.status(503).json({ error: 'Supabase client is not available.' });
       return;
     }
 
-    writeProducts(updated);
-
-    // Sync deletion to Supabase
-    if (supabase) {
-      try {
-        const { error } = await supabase.from('products').delete().eq('id', id);
-        if (error) {
-          console.warn('Supabase product delete warning:', error.message);
-        } else {
-          console.log(`Successfully deleted product id ${id} from Supabase`);
-        }
-      } catch (sbErr: any) {
-        console.warn('Supabase exception during product deletion:', sbErr.message);
-      }
+    const { error } = await supabase.from('products').delete().eq('id', id);
+    if (error) {
+      res.status(500).json({ error: 'Failed to delete product from Supabase: ' + error.message });
+      return;
     }
 
     res.json({ success: true });
@@ -605,8 +441,7 @@ app.get('/api/reviews', async (req, res) => {
   try {
     if (supabase) {
       const { data, error } = await supabase.from('reviews').select('*').order('created_at', { ascending: false });
-      if (!error && data) {
-        // Map back to format expected by static front-end lists
+      if (!error && data && data.length > 0) {
         const reviews = data.map((r: any) => ({
           id: r.id,
           author: r.author,
@@ -626,8 +461,8 @@ app.get('/api/reviews', async (req, res) => {
     console.warn('Failed to query Supabase reviews:', err.message);
   }
 
-  // Fallback to local reviews json file
-  res.json(readReviews());
+  // Fallback to static reviews in-memory lists (NO offline JSON reads)
+  res.json(initialReviews);
 });
 
 // POST Add new review comment
@@ -639,9 +474,13 @@ app.post('/api/reviews', async (req, res) => {
       return;
     }
 
-    const reviews = readReviews();
+    if (!supabase) {
+      res.status(503).json({ error: 'Supabase database is currently offline.' });
+      return;
+    }
+
     const newReview = {
-      id: 'rev-' + (reviews.length + 1) + '-' + Math.random().toString(36).substr(2, 4),
+      id: 'rev-' + Math.random().toString(36).substr(2, 9),
       author: author.trim(),
       location: location.trim(),
       rating: Number(rating || 5),
@@ -650,30 +489,19 @@ app.post('/api/reviews', async (req, res) => {
       likes: 0
     };
 
-    reviews.push(newReview);
-    writeReviews(reviews);
+    const { error } = await supabase.from('reviews').insert([{
+      id: newReview.id,
+      author: newReview.author,
+      location: newReview.location,
+      rating: newReview.rating,
+      comment: newReview.comment,
+      date: newReview.date,
+      likes: 0
+    }]);
 
-    // Save to Supabase
-    if (supabase) {
-      try {
-        const { error } = await supabase.from('reviews').insert([{
-          id: newReview.id,
-          author: newReview.author,
-          location: newReview.location,
-          rating: newReview.rating,
-          comment: newReview.comment,
-          date: newReview.date,
-          likes: 0
-        }]);
-
-        if (error) {
-          console.warn('Supabase review insert warning (table might not exist yet):', error.message);
-        } else {
-          console.log(`Successfully saved new review comment from ${newReview.author} to Supabase`);
-        }
-      } catch (sbErr: any) {
-        console.warn('Supabase exception saving review comment:', sbErr.message);
-      }
+    if (error) {
+      res.status(500).json({ error: 'Failed to submit review on Supabase: ' + error.message });
+      return;
     }
 
     res.status(201).json({ success: true, review: newReview });
@@ -687,34 +515,37 @@ app.post('/api/reviews', async (req, res) => {
 app.post('/api/reviews/:id/like', async (req, res) => {
   try {
     const { id } = req.params;
-    const reviews = readReviews();
-    const idx = reviews.findIndex((r: any) => r.id === id);
 
-    if (idx !== -1) {
-      reviews[idx].likes = (reviews[idx].likes || 0) + 1;
-      writeReviews(reviews);
-
-      // Save updated likes count to Supabase
-      if (supabase) {
-        try {
-          const { error } = await supabase.from('reviews').update({
-            likes: reviews[idx].likes
-          }).eq('id', id);
-
-          if (error) {
-            console.warn('Supabase like update warning:', error.message);
-          } else {
-            console.log(`Updated review like count for ${id} on Supabase`);
-          }
-        } catch (sbErr: any) {
-          console.warn('Supabase exception liking review:', sbErr.message);
-        }
-      }
-
-      res.json({ success: true, likes: reviews[idx].likes });
-    } else {
-      res.status(404).json({ error: 'Review testimony not found.' });
+    if (!supabase) {
+      res.status(503).json({ error: 'Supabase database is currently offline.' });
+      return;
     }
+
+    const { data: row, error: fetchErr } = await supabase
+      .from('reviews')
+      .select('likes')
+      .eq('id', id)
+      .single();
+
+    if (fetchErr || !row) {
+      res.status(404).json({ error: 'Review testimony not found.' });
+      return;
+    }
+
+    const currentLikes = Number(row.likes || 0);
+    const newLikes = currentLikes + 1;
+
+    const { error: updateErr } = await supabase
+      .from('reviews')
+      .update({ likes: newLikes })
+      .eq('id', id);
+
+    if (updateErr) {
+      res.status(500).json({ error: 'Failed to save updated likes count on Supabase: ' + updateErr.message });
+      return;
+    }
+
+    res.json({ success: true, likes: newLikes });
   } catch (err) {
     res.status(500).json({ error: 'Failed to increment review helpfulness likes.' });
   }
@@ -779,7 +610,7 @@ app.get('/api/supabase-status', async (req, res) => {
   res.json(status);
 });
 
-// GET or POST Seed Supabase with local json persistent data
+// GET or POST Seed Supabase with local persistent data template lists
 app.all('/api/supabase-seed', async (req, res) => {
   if (!supabase) {
     res.status(500).json({ error: 'Supabase client instance is not loaded.' });
@@ -787,35 +618,14 @@ app.all('/api/supabase-seed', async (req, res) => {
   }
 
   const results: any = {
-    users: 0,
     products: 0,
     reviews: 0,
     errors: []
   };
 
   try {
-    // 1. Seed Users
-    const users = readUsers();
-    for (const u of users) {
-      const { error } = await supabase.from('users').upsert({
-        id: u.id,
-        name: u.name,
-        email: u.email,
-        phone: u.phone,
-        password: u.password,
-        location: u.location,
-        created_at: u.createdAt || new Date().toISOString()
-      }, { onConflict: 'id' });
-      if (error) {
-        results.errors.push(`User ${u.email} seed error: ${error.message}`);
-      } else {
-        results.users++;
-      }
-    }
-
-    // 2. Seed Products
-    const products = readProducts();
-    for (const p of products) {
+    // 1. Seed Products from in-memory config list
+    for (const p of initialProducts) {
       const { error } = await supabase.from('products').upsert({
         id: p.id,
         name: p.name,
@@ -839,9 +649,8 @@ app.all('/api/supabase-seed', async (req, res) => {
       }
     }
 
-    // 3. Seed Reviews
-    const reviews = readReviews();
-    for (const r of reviews) {
+    // 2. Seed Reviews from in-memory config list
+    for (const r of initialReviews) {
       const { error } = await supabase.from('reviews').upsert({
         id: r.id,
         author: r.author,
@@ -872,61 +681,52 @@ async function autoSeedSupabaseData() {
   }
   console.log('Initiating non-blocking startup auto-seed to Supabase...');
   try {
-    const results = { users: 0, products: 0, reviews: 0 };
+    const results = { products: 0, reviews: 0 };
     
-    // 1. Seed Users
-    const users = readUsers();
-    for (const u of users) {
-      const { error } = await supabase.from('users').upsert({
-        id: u.id,
-        name: u.name,
-        email: u.email,
-        phone: u.phone,
-        password: u.password,
-        location: u.location,
-        created_at: u.createdAt || new Date().toISOString()
-      }, { onConflict: 'id' });
-      if (!error) results.users++;
+    // Check if products table is empty
+    const { data: existingProducts } = await supabase.from('products').select('id').limit(1);
+    if (!existingProducts || existingProducts.length === 0) {
+      console.log('Products table empty on Supabase, seeding from products.ts...');
+      for (const p of initialProducts) {
+        await supabase.from('products').upsert({
+          id: p.id,
+          name: p.name,
+          description: p.description,
+          price: p.price,
+          original_price: p.originalPrice || null,
+          image: p.image,
+          images: p.images || [p.image],
+          category: p.category,
+          colors: p.colors || [],
+          rating: p.rating,
+          reviews_count: p.reviewsCount,
+          stock: p.stock,
+          features: p.features || [],
+          specs: p.specs || {}
+        }, { onConflict: 'id' });
+        results.products++;
+      }
     }
 
-    // 2. Seed Products
-    const products = readProducts();
-    for (const p of products) {
-      const { error } = await supabase.from('products').upsert({
-        id: p.id,
-        name: p.name,
-        description: p.description,
-        price: p.price,
-        original_price: p.originalPrice || null,
-        image: p.image,
-        images: p.images || [p.image],
-        category: p.category,
-        colors: p.colors || [],
-        rating: p.rating,
-        reviews_count: p.reviewsCount,
-        stock: p.stock,
-        features: p.features || [],
-        specs: p.specs || {}
-      }, { onConflict: 'id' });
-      if (!error) results.products++;
+    // Check if reviews table is empty
+    const { data: existingReviews } = await supabase.from('reviews').select('id').limit(1);
+    if (!existingReviews || existingReviews.length === 0) {
+      console.log('Reviews table empty on Supabase, seeding from products.ts...');
+      for (const r of initialReviews) {
+        await supabase.from('reviews').upsert({
+          id: r.id,
+          author: r.author,
+          location: r.location,
+          rating: r.rating,
+          comment: r.comment,
+          date: r.date,
+          likes: r.likes || 0
+        }, { onConflict: 'id' });
+        results.reviews++;
+      }
     }
 
-    // 3. Seed Reviews
-    const reviews = readReviews();
-    for (const r of reviews) {
-      const { error } = await supabase.from('reviews').upsert({
-        id: r.id,
-        author: r.author,
-        location: r.location,
-        rating: r.rating,
-        comment: r.comment,
-        date: r.date,
-        likes: r.likes || 0
-      }, { onConflict: 'id' });
-      if (!error) results.reviews++;
-    }
-
-    console.log(`Auto-seeding complete! Cleanly synced to Supabase: ${results.users} users, ${results.products} products, ${results.reviews} reviews.`);
+    console.log(`Auto-seeding complete! Cleanly synced to Supabase: ${results.products} products, ${results.reviews} reviews.`);
   } catch (err: any) {
     console.warn('Startup auto-seed completed with standard notifications:', err.message);
   }
@@ -952,7 +752,7 @@ async function bootstrap() {
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`BuyNow Nepal server running on http://localhost:${PORT}`);
-    // Auto sync/seed local data to Supabase on start
+    // Auto sync/seed local data template to Supabase on start
     autoSeedSupabaseData();
   });
 }
