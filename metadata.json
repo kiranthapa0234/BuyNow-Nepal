@@ -1,0 +1,6 @@
+{
+  "name": "BuyNow Nepal",
+  "description": "Nepal's trusted online shopping destination. Browse electronics, fashion, and accessories with secure payment integrations like eSewa, Khalti, IME Pay, and cash on delivery.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
