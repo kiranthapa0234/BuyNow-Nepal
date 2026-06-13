@@ -16,6 +16,7 @@ import AiAssistant from './components/AiAssistant';
 import { Eye, ShieldAlert, Sparkles, Filter, RefreshCcw, CheckCircle2, Plus, Database, Copy, Check } from 'lucide-react';
 import AdminProductModal from './components/AdminProductModal';
 import UserProfileModal from './components/UserProfileModal';
+import OrderTrackingPage from './components/OrderTrackingPage';
 import { useEffect } from 'react';
 
 const SQL_SCHEMA = `-- 1. Create Users Table
@@ -744,6 +745,19 @@ export default function App() {
               transition={{ duration: 0.3 }}
             >
               <ContactPage />
+            </motion.div>
+          )}
+
+          {/* LOGISTICS DISPATCH TRACKER */}
+          {activeTab === 'track' && (
+            <motion.div
+              key="track"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.3 }}
+            >
+              <OrderTrackingPage />
             </motion.div>
           )}
 

@@ -72,6 +72,14 @@ export default function Footer({ onNavClick, activeTab }: FooterProps) {
             </li>
             <li>
               <button 
+                onClick={() => onNavClick('track')}
+                className={`hover:text-white transition-colors cursor-pointer ${activeTab === 'track' ? 'text-blue-500' : 'text-gray-400'}`}
+              >
+                Track Shipping Order 🚚
+              </button>
+            </li>
+            <li>
+              <button 
                 onClick={() => onNavClick('reviews')}
                 className={`hover:text-white transition-colors cursor-pointer ${activeTab === 'reviews' ? 'text-blue-500' : 'text-gray-400'}`}
               >

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Calendar, Package, MapPin, Phone, Mail, DollarSign, ChevronDown, ChevronUp, Clock, CheckCircle2, User, LogOut, Trash2 } from 'lucide-react';
+import { X, Calendar, Package, MapPin, Phone, Mail, DollarSign, ChevronDown, ChevronUp, Clock, CheckCircle2, User, LogOut, Trash2, Truck } from 'lucide-react';
 import { UserProfile } from '../types';
 
 interface OrderItem {
@@ -345,14 +345,28 @@ export default function UserProfileModal({
 
                           {/* Shipping address & pricing break */}
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-3 border-t border-dashed border-slate-205">
-                            <div className="space-y-1">
+                            <div className="space-y-1 text-left">
                               <h4 className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Shipping Destination</h4>
                               <p className="text-[10.5px] font-semibold text-slate-600 leading-normal">
                                 {order.shippingAddress}
                               </p>
-                              <p className="text-[10px] text-slate-400 font-semibold mt-1">
-                                Gateway selected: <strong className="text-slate-600 font-bold">{order.paymentMethod}</strong>
-                              </p>
+                              <div className="flex flex-wrap items-center gap-3 pt-1.5">
+                                <p className="text-[10px] text-slate-400 font-semibold">
+                                  Gateway selected: <strong className="text-slate-600 font-bold">{order.paymentMethod}</strong>
+                                </p>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    localStorage.setItem('buynow_active_tracking_id', order.id);
+                                    onClose();
+                                    window.dispatchEvent(new CustomEvent('buynow_track_order', { detail: order.id }));
+                                  }}
+                                  className="px-2.5 py-1 bg-blue-50 hover:bg-blue-600 text-blue-600 hover:text-white border border-blue-100 rounded-lg text-[9px] font-bold tracking-wider uppercase transition flex items-center gap-1 cursor-pointer select-none"
+                                >
+                                  <Truck size={11} />
+                                  <span>Track Live Dispatch</span>
+                                </button>
+                              </div>
                             </div>
 
                             <div className="space-y-1 md:text-right bg-white p-2.5 border border-slate-200 rounded-xl text-[11px]">

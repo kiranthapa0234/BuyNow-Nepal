@@ -161,6 +161,15 @@ export default function Navbar({
                 Shop
               </button>
               <button
+                onClick={() => setActiveTab('track')}
+                className={`text-xs uppercase tracking-wider font-semibold transition-colors cursor-pointer ${
+                  activeTab === 'track' ? 'text-blue-600 font-bold' : 'text-slate-500 hover:text-slate-900'
+                }`}
+                id="nav-track-link"
+              >
+                Track Order 🚚
+              </button>
+              <button
                 onClick={() => setActiveTab('reviews')}
                 className={`text-xs uppercase tracking-wider font-semibold transition-colors cursor-pointer ${
                   activeTab === 'reviews' ? 'text-blue-600 font-bold' : 'text-slate-500 hover:text-slate-900'
@@ -260,6 +269,17 @@ export default function Navbar({
             }`}
           >
             Shop
+          </button>
+          <button
+            onClick={() => setActiveTab('track')}
+            className={`flex-shrink-0 px-4 py-1.5 text-xs font-semibold uppercase tracking-wider rounded-lg transition border ${
+              activeTab === 'track' 
+                ? 'bg-blue-605 text-white border-blue-605 bg-blue-600' 
+                : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+            }`}
+            id="mobile-nav-track-link"
+          >
+            Track Order 🚚
           </button>
           <button
             onClick={() => setActiveTab('reviews')}
