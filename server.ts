@@ -322,23 +322,95 @@ app.get('/api/products', async (req, res) => {
     if (supabase) {
       const { data, error } = await supabase.from('products').select('*');
       if (!error && data && data.length > 0) {
-        // Map back to our structure cleanly
-        const mappedProducts = data.map((p: any) => ({
-          id: p.id,
-          name: p.name,
-          description: p.description || '',
-          price: Number(p.price),
-          originalPrice: p.original_price ? Number(p.original_price) : undefined,
-          image: p.image || '',
-          images: Array.isArray(p.images) ? p.images : [p.image || ''],
-          category: p.category || '',
-          colors: Array.isArray(p.colors) ? p.colors : [],
-          rating: p.rating ? Number(p.rating) : 5.0,
-          reviewsCount: p.reviews_count ? Number(p.reviews_count) : 0,
-          stock: p.stock ? Number(p.stock) : 10,
-          features: Array.isArray(p.features) ? p.features : [],
-          specs: typeof p.specs === 'string' ? JSON.parse(p.specs) : (p.specs || {})
-        }));
+        // Map back to our structure cleanly and with absolute bullet-proof error handling
+        const mappedProducts = data.map((p: any) => {
+          let parsedSpecs: Record<string, string> = {};
+          if (p.specs) {
+            if (typeof p.specs === 'string') {
+              try {
+                const parsed = JSON.parse(p.specs);
+                if (parsed && typeof parsed === 'object') {
+                  parsedSpecs = parsed;
+                }
+              } catch (_) {
+                parsedSpecs = {};
+              }
+            } else if (typeof p.specs === 'object') {
+              parsedSpecs = p.specs;
+            }
+          }
+
+          let parsedImages: string[] = [];
+          if (Array.isArray(p.images)) {
+            parsedImages = p.images;
+          } else if (typeof p.images === 'string') {
+            try {
+              const parsed = JSON.parse(p.images);
+              if (Array.isArray(parsed)) {
+                parsedImages = parsed;
+              } else if (p.images) {
+                parsedImages = [p.images];
+              }
+            } catch (_) {
+              if (p.images) parsedImages = [p.images];
+            }
+          }
+          if (parsedImages.length === 0) {
+            parsedImages = p.image ? [p.image] : [];
+          }
+
+          let parsedColors: string[] = [];
+          if (Array.isArray(p.colors)) {
+            parsedColors = p.colors;
+          } else if (typeof p.colors === 'string') {
+            try {
+              const parsed = JSON.parse(p.colors);
+              if (Array.isArray(parsed)) {
+                parsedColors = parsed;
+              } else {
+                parsedColors = p.colors.split(',').map((c: any) => c.trim()).filter((c: any) => c);
+              }
+            } catch (_) {
+              parsedColors = p.colors.split(',').map((c: any) => c.trim()).filter((c: any) => c);
+            }
+          }
+          if (parsedColors.length === 0) {
+            parsedColors = ['Carbon Black'];
+          }
+
+          let parsedFeatures: string[] = [];
+          if (Array.isArray(p.features)) {
+            parsedFeatures = p.features;
+          } else if (typeof p.features === 'string') {
+            try {
+              const parsed = JSON.parse(p.features);
+              if (Array.isArray(parsed)) {
+                parsedFeatures = parsed;
+              } else {
+                parsedFeatures = p.features.split('\n').map((f: any) => f.trim()).filter((f: any) => f);
+              }
+            } catch (_) {
+              parsedFeatures = p.features.split('\n').map((f: any) => f.trim()).filter((f: any) => f);
+            }
+          }
+
+          return {
+            id: p.id,
+            name: p.name,
+            description: p.description || '',
+            price: Number(p.price),
+            originalPrice: p.original_price ? Number(p.original_price) : undefined,
+            image: p.image || (parsedImages[0] || ''),
+            images: parsedImages,
+            category: p.category || '',
+            colors: parsedColors,
+            rating: p.rating ? Number(p.rating) : 5.0,
+            reviewsCount: p.reviews_count ? Number(p.reviews_count) : 0,
+            stock: p.stock !== undefined && p.stock !== null ? Number(p.stock) : 10,
+            features: parsedFeatures,
+            specs: parsedSpecs
+          };
+        });
         res.json(mappedProducts);
         return;
       } else if (error) {
@@ -346,7 +418,7 @@ app.get('/api/products', async (req, res) => {
       }
     }
   } catch (err: any) {
-    console.warn('Failed to query Supabase products:', err.message);
+    console.error('Failed to query or parse Supabase products:', err.message);
   }
 
   // Fallback to static in-memory products (NO offline JSON reads)

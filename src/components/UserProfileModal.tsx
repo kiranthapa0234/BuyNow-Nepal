@@ -137,17 +137,15 @@ export default function UserProfileModal({
   };
 
   const handleClearHistory = () => {
-    if (window.confirm('Do you want to clear your local order history? New orders from checks will still be saved.')) {
-      try {
-        const savedOrdersRaw = localStorage.getItem('buynow_orders');
-        const saved: LocalOrder[] = savedOrdersRaw ? JSON.parse(savedOrdersRaw) : [];
-        const filtered = saved.filter(order => order.email !== user.email);
-        localStorage.setItem('buynow_orders', JSON.stringify(filtered));
-        localStorage.setItem(`buynow_orders_seeded_${user.email}`, 'true'); // Don't re-seed
-        setOrders([]);
-      } catch (err) {
-        console.error(err);
-      }
+    try {
+      const savedOrdersRaw = localStorage.getItem('buynow_orders');
+      const saved: LocalOrder[] = savedOrdersRaw ? JSON.parse(savedOrdersRaw) : [];
+      const filtered = saved.filter(order => order.email !== user.email);
+      localStorage.setItem('buynow_orders', JSON.stringify(filtered));
+      localStorage.setItem(`buynow_orders_seeded_${user.email}`, 'true'); // Don't re-seed
+      setOrders([]);
+    } catch (err) {
+      console.error(err);
     }
   };
 
@@ -389,12 +387,10 @@ export default function UserProfileModal({
           <button
             type="button"
             onClick={() => {
-              if (window.confirm('Are you sure you want to log out from your active session?')) {
-                onSignOut();
-                onClose();
-              }
+              onSignOut();
+              onClose();
             }}
-            className="p-2.5 px-3 bg-red-50 hover:bg-red-600 hover:text-white text-red-600 border border-red-200 font-bold text-2xs uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer rounded-xl"
+            className="p-2.5 px-3 bg-red-50 hover:bg-red-650 hover:text-white text-red-600 border border-red-200 font-bold text-2xs uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer rounded-xl"
             id="modal-signout-btn"
           >
             <LogOut size={12} />

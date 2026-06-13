@@ -11,7 +11,14 @@ interface ProductModalProps {
 export default function ProductModal({ product, onClose, onAddToCart }: ProductModalProps) {
   if (!product) return null;
 
-  const [selectedColor, setSelectedColor] = React.useState(product.colors[0]);
+  // Compute a list of unique, valid colors for the product
+  const colorsList = React.useMemo(() => {
+    return Array.isArray(product.colors) && product.colors.length > 0
+      ? product.colors
+      : ['Carbon Black'];
+  }, [product]);
+
+  const [selectedColor, setSelectedColor] = React.useState(colorsList[0]);
   const [quantity, setQuantity] = React.useState(1);
   const [isAdded, setIsAdded] = React.useState(false);
 
@@ -33,11 +40,11 @@ export default function ProductModal({ product, onClose, onAddToCart }: ProductM
 
   // Sync color and active image when product changes
   React.useEffect(() => {
-    setSelectedColor(product.colors[0]);
+    setSelectedColor(colorsList[0]);
     setQuantity(1);
     setIsAdded(false);
     setActiveImage(imagesList[0]);
-  }, [product, imagesList]);
+  }, [product, imagesList, colorsList]);
 
   const handleDecrease = () => {
     if (quantity > 1) setQuantity((prev) => prev - 1);
@@ -195,7 +202,7 @@ export default function ProductModal({ product, onClose, onAddToCart }: ProductM
                 Select Color: <span className="text-gray-900 font-extrabold">{selectedColor}</span>
               </span>
               <div className="flex gap-2">
-                {product.colors.map((color) => (
+                {colorsList.map((color) => (
                   <button
                     key={color}
                     onClick={() => setSelectedColor(color)}
@@ -218,7 +225,7 @@ export default function ProductModal({ product, onClose, onAddToCart }: ProductM
                 Highlights & Features
               </span>
               <ul className="space-y-1 text-xs text-gray-600 font-medium">
-                {product.features.map((feat, index) => (
+                {(product.features || []).map((feat, index) => (
                   <li key={index} className="flex items-start gap-2">
                     <span className="text-emerald-500 font-extrabold mt-0.5">✔</span>
                     <span>{feat}</span>
@@ -235,7 +242,7 @@ export default function ProductModal({ product, onClose, onAddToCart }: ProductM
               <div className="bg-gray-50 rounded-xl p-3 border border-gray-100 overflow-hidden text-xs">
                 <table className="w-full">
                   <tbody>
-                    {Object.entries(product.specs).map(([key, val]) => (
+                    {Object.entries(product.specs || {}).map(([key, val]) => (
                       <tr key={key} className="border-b border-gray-200 last:border-0 py-1.5 flex justify-between">
                         <td className="font-bold text-gray-500 mr-2">{key}</td>
                         <td className="font-extrabold text-gray-800 text-right">{val}</td>
